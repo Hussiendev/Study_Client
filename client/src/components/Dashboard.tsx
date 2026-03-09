@@ -1,111 +1,232 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, 
   UserPlus, 
   LogOut, 
-  Menu, 
-  X, 
   Search,
   Edit,
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Plus,
-  Mail,
-  Phone,
-  Calendar
+  Plus
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import api from '../service/api';
+import { User } from '../types/auth.types';
+import AddUserForm from './forms/AddUserForm';
 
-// Mock user data - will be replaced with API data later
-const mockUsers = [
-  { 
-    id: '1', 
-    name: 'John Doe', 
-    email: 'john@example.com', 
-    role: 'Admin',
-    status: 'Active',
-    lastActive: '2024-02-28',
-    avatar: 'JD'
-  },
-  { 
-    id: '2', 
-    name: 'Jane Smith', 
-    email: 'jane@example.com', 
-    role: 'User',
-    status: 'Active',
-    lastActive: '2024-02-28',
-    avatar: 'JS'
-  },
-  { 
-    id: '3', 
-    name: 'Bob Johnson', 
-    email: 'bob@example.com', 
-    role: 'User',
-    status: 'Inactive',
-    lastActive: '2024-02-27',
-    avatar: 'BJ'
-  },
-  { 
-    id: '4', 
-    name: 'Alice Brown', 
-    email: 'alice@example.com', 
-    role: 'Editor',
-    status: 'Active',
-    lastActive: '2024-02-28',
-    avatar: 'AB'
-  },
-  { 
-    id: '5', 
-    name: 'Charlie Wilson', 
-    email: 'charlie@example.com', 
-    role: 'User',
-    status: 'Active',
-    lastActive: '2024-02-26',
-    avatar: 'CW'
-  },
-];
+// Extended User interface for dashboard display
+interface DashboardUser extends User {
+  status?: string;
+  lastActive?: string;
+  avatar?: string;
+}
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user, logout, isAuthenticated } = useAuth(); // Get logout from AuthContext
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<string | null>(null);
-  const [users, setUsers] = useState(mockUsers);
+  const [userToDelete, setUserToDelete] = useState<{id: string, email: string, name: string} | null>(null);
+  const [users, setUsers] = useState<DashboardUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const handleLogout = () => {
-    navigate('/login');
+  // Check if user is authenticated and is admin
+  useEffect(() => {
+    console.log('Auth check - isAuthenticated:', isAuthenticated, 'user:', user);
+    if (!isAuthenticated) {
+      navigate('/login', { replace: true });
+    } else if (user?.role?.toLowerCase() !== 'admin') {
+      navigate('/unauthorized', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Fetch users from database
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      
+      console.log('Fetching users with cookie auth...');
+      
+      const response = await api.get('/users/');
+      console.log('API Response:', response.data);
+      
+      // Transform the data to match DashboardUser interface
+      if (response.data && response.data.users) {
+        const transformedUsers: DashboardUser[] = response.data.users.map((dbUser: any) => {
+          console.log('Raw user data from DB:', dbUser);
+          
+          // Get the ID - check different possible field names
+          const userId = dbUser._id || dbUser.id || dbUser.userId;
+          console.log('Extracted user ID:', userId);
+          
+          return {
+            id: userId,
+            name: dbUser.name,
+            email: dbUser.email,
+            role: dbUser.role === 'admin' ? 'Admin' : 
+                  dbUser.role === 'user' ? 'User' : 
+                  dbUser.role || 'User',
+            status: 'Active',
+            lastActive: new Date().toLocaleDateString(),
+            avatar: dbUser.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+            createdAt: dbUser.createdAt ? new Date(dbUser.createdAt) : undefined
+          };
+        });
+        console.log('Transformed users:', transformedUsers);
+        setUsers(transformedUsers);
+      }
+      
+      setError(null);
+    } catch (err: any) {
+      console.error('Error fetching users:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+      });
+      
+      if (err.response?.status === 401) {
+        setError('Authentication failed. Please log in again.');
+        setTimeout(() => navigate('/login', { replace: true }), 2000);
+      } else {
+        setError(err.response?.data?.message || 'Failed to fetch users');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteClick = (userId: string) => {
-    setUserToDelete(userId);
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchUsers();
+    }
+  }, [isAuthenticated]);
+
+  // Use the logout function from AuthContext
+  const handleLogout = async () => {
+    try {
+      console.log('Logging out via AuthContext...');
+      await logout(); // This will call the AuthContext logout function
+      console.log('Logout successful');
+      navigate('/login', { replace: true });
+    } catch (error: any) {
+      console.error('Logout error:', error);
+      // Still try to navigate to login even if logout fails
+      navigate('/login', { replace: true });
+    }
+  };
+
+  const handleDeleteClick = (userId: string, userEmail: string, userName: string) => {
+    console.log('Delete clicked - received values:', { 
+      userId, 
+      userEmail, 
+      userName,
+      userIdType: typeof userId,
+      userIdLength: userId?.length,
+      userIdValue: userId
+    });
+    
+    // Check if this is the main admin
+    if (userEmail === 'hussienzoughaib@gmail.com') {
+      console.log('Cannot delete main admin');
+      alert('Cannot delete the main admin user');
+      return;
+    }
+    
+    if (!userId) {
+      console.error('User ID is missing or undefined!');
+      alert('Error: User ID is missing');
+      return;
+    }
+    
+    // Store user data
+    const userData = { id: userId, email: userEmail, name: userName };
+    console.log('Setting userToDelete state:', userData);
+    setUserToDelete(userData);
     setShowDeleteModal(true);
   };
 
-  const handleDeleteConfirm = () => {
-    if (userToDelete) {
-      setUsers(users.filter(user => user.id !== userToDelete));
+  const handleDeleteConfirm = async () => {
+    console.log('Delete confirm clicked');
+    console.log('Current userToDelete state:', userToDelete);
+    
+    if (!userToDelete) {
+      console.log('No user to delete - userToDelete is null');
+      alert('No user selected for deletion');
+      return;
+    }
+
+    console.log('userToDelete object:', userToDelete);
+    console.log('userToDelete.id value:', userToDelete.id);
+    console.log('userToDelete.id type:', typeof userToDelete.id);
+    
+    const idToDelete = userToDelete.id;
+    
+    if (!idToDelete || idToDelete === 'undefined' || idToDelete === 'null') {
+      console.log('Invalid ID found:', idToDelete);
+      alert('Invalid user ID: ' + (idToDelete || 'empty'));
+      return;
+    }
+    
+    try {
+      setDeleteLoading(true);
+      console.log('Making delete request to:', `/users/${idToDelete}`);
+      
+      const response = await api.delete(`/users/${idToDelete}`, {
+        withCredentials: true
+      });
+      
+      console.log('Delete response:', response.data);
+      
+      // Remove from local state after successful deletion
+      setUsers(users.filter(u => u.id !== idToDelete));
       setShowDeleteModal(false);
       setUserToDelete(null);
+      
+      console.log('User deleted successfully');
+      
+    } catch (err: any) {
+      console.error('Error deleting user:', err);
+      console.error('Error response:', err.response);
+      console.error('Error status:', err.response?.status);
+      console.error('Error data:', err.response?.data);
+      
+      const errorMessage = err.response?.data?.message || 
+                          err.response?.data?.error || 
+                          'Failed to delete user';
+      
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   const handleDeleteCancel = () => {
+    console.log('Delete cancelled');
     setShowDeleteModal(false);
-    setUserToDelete(null);
+    setTimeout(() => setUserToDelete(null), 300);
   };
 
   const handleAddUser = () => {
-    // This will be connected to backend later
-    alert('Add user functionality - to be connected to backend');
+    console.log('Add user clicked');
+    setShowAddUserModal(true);
   };
 
   const handleEditUser = (userId: string) => {
-    // This will be connected to backend later
+    console.log('Edit user clicked:', userId);
     alert(`Edit user ${userId} - to be connected to backend`);
+  };
+
+  const handleUserAdded = () => {
+    console.log('User added, refreshing list');
+    fetchUsers();
   };
 
   const filteredUsers = users.filter(user => 
@@ -114,8 +235,41 @@ const Dashboard: React.FC = () => {
     user.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full bg-gray-50 items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading users...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex h-screen w-full bg-gray-50 items-center justify-center">
+        <div className="text-center bg-white p-8 rounded-xl shadow-xl">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Users className="w-8 h-8 text-red-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Error Loading Users</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen w-full bg-gray-50">
       {/* Sidebar */}
       <motion.div
         initial={{ width: sidebarOpen ? 280 : 80 }}
@@ -151,6 +305,24 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
 
+        {/* User Info */}
+        {sidebarOpen && user && (
+          <div className="p-4 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-lg flex items-center justify-center text-white font-semibold">
+                {user.name?.charAt(0) || 'U'}
+              </div>
+              <div>
+                <p className="font-medium text-gray-800">{user.name}</p>
+                <p className="text-sm text-gray-500">{user.email}</p>
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full mt-1 inline-block">
+                  {user.role}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Sidebar Menu */}
         <div className="p-4">
           <ul className="space-y-2">
@@ -171,7 +343,7 @@ const Dashboard: React.FC = () => {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                     >
-                      All Users
+                      All Users ({users.length})
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -228,7 +400,9 @@ const Dashboard: React.FC = () => {
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-transparent bg-clip-text">
                 User Management
               </h1>
-              <p className="text-gray-500 mt-1">Manage your users and their permissions</p>
+              <p className="text-gray-500 mt-1">
+                Manage your users and their permissions • {users.length} total users
+              </p>
             </div>
             
             {/* Search Bar */}
@@ -261,6 +435,7 @@ const Dashboard: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">ID</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">User</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Email</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Role</th>
@@ -279,9 +454,14 @@ const Dashboard: React.FC = () => {
                       className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-6 py-4">
+                        <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {user.id.substring(0, 8)}...
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-lg flex items-center justify-center text-white font-semibold">
-                            {user.avatar}
+                            {user.avatar || user.name.charAt(0).toUpperCase()}
                           </div>
                           <span className="font-medium text-gray-800">{user.name}</span>
                         </div>
@@ -300,10 +480,10 @@ const Dashboard: React.FC = () => {
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           user.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
-                          {user.status}
+                          {user.status || 'Active'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{user.lastActive}</td>
+                      <td className="px-6 py-4 text-gray-600">{user.lastActive || 'N/A'}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -314,7 +494,7 @@ const Dashboard: React.FC = () => {
                             <Edit size={18} />
                           </button>
                           <button
-                            onClick={() => handleDeleteClick(user.id)}
+                            onClick={() => handleDeleteClick(user.id, user.email, user.name)}
                             className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
                             title="Delete user"
                           >
@@ -333,7 +513,9 @@ const Dashboard: React.FC = () => {
               <div className="text-center py-12">
                 <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-700 mb-2">No users found</h3>
-                <p className="text-gray-500">Try adjusting your search or add a new user</p>
+                <p className="text-gray-500">
+                  {searchTerm ? 'Try adjusting your search' : 'Add a new user to get started'}
+                </p>
               </div>
             )}
 
@@ -356,7 +538,7 @@ const Dashboard: React.FC = () => {
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
-        {showDeleteModal && (
+        {showDeleteModal && userToDelete && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -376,26 +558,42 @@ const Dashboard: React.FC = () => {
               </div>
               <h3 className="text-xl font-bold text-gray-800 text-center mb-2">Delete User</h3>
               <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete this user? This action cannot be undone.
+                Are you sure you want to delete <span className="font-semibold">{userToDelete.name}</span> ({userToDelete.email})? This action cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={handleDeleteCancel}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={deleteLoading}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteConfirm}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  disabled={deleteLoading}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Delete
+                  {deleteLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Add User Modal */}
+      <AddUserForm 
+        isOpen={showAddUserModal}
+        onClose={() => setShowAddUserModal(false)}
+        onUserAdded={handleUserAdded}
+      />
     </div>
   );
 };
