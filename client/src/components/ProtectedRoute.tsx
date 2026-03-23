@@ -3,13 +3,12 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
-  requiredRole?: string; // Make role optional
+  requiredRole?: string;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole = 'admin' }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole }) => {
   const { isAuthenticated, user, loading } = useAuth();
 
-  // Show loading spinner while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
@@ -18,21 +17,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredRole = 'admin' 
     );
   }
 
-  // Not authenticated at all
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Check if user has required role (case-insensitive)
-  const userRole = user?.role?.toLowerCase();
-  const required = requiredRole.toLowerCase();
-  
-  if (userRole !== required) {
-    // User is authenticated but not admin - redirect to unauthorized page
-    return <Navigate to="/unauthorized" replace />;
+  // If a specific role is required (like for admin dashboard), check it
+  if (requiredRole) {
+    const userRole = user?.role?.toLowerCase();
+    const required = requiredRole.toLowerCase();
+    
+    if (userRole !== required) {
+      return <Navigate to="/unauthorized" replace />;
+    }
   }
 
-  // User is authenticated AND is admin
+  // For routes without requiredRole (like PDF page), just allow access
   return <Outlet />;
 };
 

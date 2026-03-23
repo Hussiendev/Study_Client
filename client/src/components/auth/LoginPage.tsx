@@ -36,8 +36,8 @@ const LoginPage: React.FC = () => {
       
       // Check user role and redirect accordingly
       if (user.role === 'admin' || user.role === 'Admin' || user.role === 'ADMIN') {
-        console.log('Admin user detected, redirecting to dashboard');
-        navigate('/dashboard');
+        console.log('Admin user detected, redirecting to home');
+        navigate('/');
       } else {
         console.log('Regular user detected, redirecting to home');
         navigate('/');
@@ -90,16 +90,10 @@ const LoginPage: React.FC = () => {
             
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  if (user.role === 'admin') {
-                    navigate('/dashboard');
-                  } else {
-                    navigate('/');
-                  }
-                }}
+                onClick={() => navigate('/')}
                 className="flex-1 py-2 px-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Go to {user.role === 'admin' ? 'Dashboard' : 'Home'}
+                Go to Home
               </button>
               
               <button

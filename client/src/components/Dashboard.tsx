@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../service/api';
 import { User } from '../types/auth.types';
 import AddUserForm from './forms/AddUserForm';
+import UpdateUserForm from './forms/UpdateUserForm';
 
 // Extended User interface for dashboard display
 interface DashboardUser extends User {
@@ -26,12 +27,14 @@ interface DashboardUser extends User {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth(); // Get logout from AuthContext
+  const { user, logout, isAuthenticated, updateUser } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{id: string, email: string, name: string} | null>(null);
+  const [userToUpdate, setUserToUpdate] = useState<{id: string, name: string, email: string, role: string} | null>(null);
   const [users, setUsers] = useState<DashboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,16 +112,14 @@ const Dashboard: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  // Use the logout function from AuthContext
   const handleLogout = async () => {
     try {
       console.log('Logging out via AuthContext...');
-      await logout(); // This will call the AuthContext logout function
+      await logout();
       console.log('Logout successful');
       navigate('/login', { replace: true });
     } catch (error: any) {
       console.error('Logout error:', error);
-      // Still try to navigate to login even if logout fails
       navigate('/login', { replace: true });
     }
   };
@@ -219,14 +220,57 @@ const Dashboard: React.FC = () => {
     setShowAddUserModal(true);
   };
 
-  const handleEditUser = (userId: string) => {
-    console.log('Edit user clicked:', userId);
-    alert(`Edit user ${userId} - to be connected to backend`);
+  const handleEditClick = (userId: string, userName: string, userEmail: string, userRole: string) => {
+    console.log('Edit clicked for user:', { userId, userName, userEmail, userRole });
+    
+    setUserToUpdate({
+      id: userId,
+      name: userName,
+      email: userEmail,
+      role: userRole
+    });
+    setShowUpdateModal(true);
+  };
+
+  const handleUpdateUser = async (userId: string, updatedData: { name?: string; email?: string; role?: string; password?: string }) => {
+    try {
+      console.log('Preparing update request for user:', userId);
+      console.log('Update data:', updatedData);
+      
+      // Format the data with ALL fields the backend expects
+      const userDataToSend = {
+        name: updatedData.name,
+        email: updatedData.email,
+        role: updatedData.role?.toLowerCase() || 'user', // Always include role
+        ...(updatedData.password && updatedData.password.trim() !== '' ? { password: updatedData.password } : {})
+      };
+      
+      console.log('Sending to AuthContext:', userDataToSend);
+      
+      // Call the update function from AuthContext
+      await updateUser(userId, userDataToSend);
+      
+      // Refresh the users list
+      await fetchUsers();
+      
+      console.log('User updated successfully');
+      
+    } catch (error: any) {
+      console.error('Error in handleUpdateUser:', error);
+      throw error;
+    }
   };
 
   const handleUserAdded = () => {
     console.log('User added, refreshing list');
     fetchUsers();
+  };
+
+  const handleUserUpdated = () => {
+    console.log('User updated, refreshing list');
+    fetchUsers();
+    setShowUpdateModal(false);
+    setUserToUpdate(null);
   };
 
   const filteredUsers = users.filter(user => 
@@ -487,7 +531,7 @@ const Dashboard: React.FC = () => {
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleEditUser(user.id)}
+                            onClick={() => handleEditClick(user.id, user.name, user.email, user.role)}
                             className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
                             title="Edit user"
                           >
@@ -593,6 +637,18 @@ const Dashboard: React.FC = () => {
         isOpen={showAddUserModal}
         onClose={() => setShowAddUserModal(false)}
         onUserAdded={handleUserAdded}
+      />
+
+      {/* Update User Modal */}
+      <UpdateUserForm
+        isOpen={showUpdateModal}
+        onClose={() => {
+          setShowUpdateModal(false);
+          setUserToUpdate(null);
+        }}
+        onUserUpdated={handleUserUpdated}
+        userData={userToUpdate}
+        onUpdate={handleUpdateUser}
       />
     </div>
   );

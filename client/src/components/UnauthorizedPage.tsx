@@ -24,11 +24,11 @@ const UnauthorizedPage: React.FC = () => {
         
         <div className="space-y-3">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/')}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <ArrowLeft size={18} />
-            Go to Dashboard
+            Go to Home
           </button>
           
           <button

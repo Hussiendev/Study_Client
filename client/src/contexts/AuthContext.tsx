@@ -9,6 +9,7 @@ interface AuthContextType {
   register: (email: string, name: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateUser: (userId: string, userData: { name?: string; email?: string; role?: string; password?: string }) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -33,7 +34,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           // Verify the cookie is still valid by making a test request
           try {
-            // Try to fetch a protected endpoint to verify cookie
             await api.get('/users/');
             console.log('Auth cookie valid, user is authenticated');
             setUser(parsedUser);
@@ -101,7 +101,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email,
         password
       }, {
-        withCredentials: true // Important for cookies
+        withCredentials: true
       });
 
       console.log('Login response:', response.data);
@@ -131,7 +131,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = async () => {
     try {
       // Call logout endpoint to clear cookies
-      await api.get('/auth/logout', {});
+      await api.get('/auth/logout', {} );
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -142,6 +142,57 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Update user function
+const updateUser = async (userId: string, userData: { name?: string; email?: string; role?: string; password?: string }) => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    console.log('Sending update request to:', `/users/${userId}`);
+    console.log('Request data:', userData);
+    
+    // Send ALL fields the JSONMapper expects
+    const updatePayload = {
+      name: userData.name,
+      email: userData.email,
+      role: userData.role, // Always include role!
+      ...(userData.password && userData.password.trim() !== '' ? { password: userData.password } : {})
+    };
+    
+    console.log('Update payload:', updatePayload);
+    
+    const response = await api.put(`/users/${userId}`, updatePayload, {
+      withCredentials: true
+    });
+
+    console.log('Update response:', response.data);
+    
+    // If the updated user is the currently logged in user, update the stored user
+    if (user && user.id === userId) {
+      const updatedUser = { 
+        ...user, 
+        name: userData.name || user.name,
+        email: userData.email || user.email,
+        role: userData.role || user.role
+      };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      console.log('Current user updated in storage');
+    }
+    
+  } catch (err: any) {
+    console.error('Update error:', err.response?.data || err.message);
+    
+    const errorMessage = err.response?.data?.message || 
+                        err.response?.data?.error || 
+                        err.message ||
+                        'Failed to update user';
+    setError(errorMessage);
+    throw err;
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -149,7 +200,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       error, 
       register, 
       login, 
-      logout, 
+      logout,
+      updateUser,
       isAuthenticated 
     }}>
       {children}

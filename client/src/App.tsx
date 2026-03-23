@@ -3,10 +3,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './contexts/AuthContext';
 import SignupPage from './components/auth/SignupPage'
 import LoginPage from './components/auth/LoginPage';
-import Dashboard from './components/Dashboard';
 import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import PdfSummaryPage from './components/pdf/PdfSummaryPage'; // NEW: Import PDF component
 import './App.css';
 
 function App() {
@@ -22,13 +22,17 @@ function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             
             {/* Protected Routes - Require authentication */}
-              <Route element={<ProtectedRoute />}>
-              <Route path="/dashboard" element={<Dashboard />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/pdf" element={<PdfSummaryPage />} /> {/* NEW: PDF route */}
+              <Route path="/flashcards" element={<PdfSummaryPage />} /> {/* NEW: Flashcards route (same page) */}
               {/* Add other protected routes here */}
             </Route>  
             
-            {/* Redirect any unknown routes to home */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Redirect root to pdf page */}
+            <Route path="/" element={<Navigate to="/pdf" replace />} />
+            
+            {/* Redirect any unknown routes to pdf */}
+            <Route path="*" element={<Navigate to="/pdf" replace />} />
           </Routes>
         </div>
       </AuthProvider>
