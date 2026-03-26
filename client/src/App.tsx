@@ -8,6 +8,7 @@ import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PdfSummaryPage from './components/pdf/PdfSummaryPage'; // NEW: Import PDF component
 import './App.css';
+import Dashboard from './components/Dashboard';
 
 function App() {
   return (
@@ -25,11 +26,12 @@ function App() {
             <Route element={<ProtectedRoute />}>
               <Route path="/pdf" element={<PdfSummaryPage />} /> {/* NEW: PDF route */}
               <Route path="/flashcards" element={<PdfSummaryPage />} /> {/* NEW: Flashcards route (same page) */}
+               <Route path="/dashboard" element={<Dashboard />} /> {/* NEW: Dashboard route (same page) */}
               {/* Add other protected routes here */}
             </Route>  
             
-            {/* Redirect root to pdf page */}
-            <Route path="/" element={<Navigate to="/pdf" replace />} />
+            {/* Redirect root to dashboard page */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
             {/* Redirect any unknown routes to pdf */}
             <Route path="*" element={<Navigate to="/pdf" replace />} />
